@@ -1,2 +1,2 @@
-# data_cleaning_project
- SQL project for cleaning housing data using MySQL Workbench
+# Data Analytics Portfolio Repository
+This repository holds all files from my projects, feel free to use!
