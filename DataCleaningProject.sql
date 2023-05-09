@@ -1,6 +1,6 @@
 /*
 
-DATA CLEANING Nashville Housing Datasetusing MySQL
+DATA CLEANING Nashville Housing Dataset using in MySQL Workbench
 
 Project Objectives:
 
@@ -55,6 +55,25 @@ CREATE TABLE `housing` (
 
 #-------------------- query for importing data from csv file into table -----------------------------------------------
 
+/*
+The import wizard tool on MySQL Workbench takes too long and is sometimes faulty with importing the complete dataset,
+so I wanted to import the dataset manually by running the query:
+
+LOAD DATA INFILE '/filepath/filename.csv' INTO TABLE table_name
+
+However, I kept receiving the following error message:
+"Error Code: 1290. The MySQL server is running with the --secure-file-priv option so it cannot execute this statement"
+
+After an ENTIRE day of exploring stackoverflow and youtube videos, I finally resolved this issue!!!
+
+1. add 'OPT_LOCAL_INFILE=1' in the 'Others:' text box on the Advanced tab of our server connection editor
+2. turn the local_infile variable on
+
+so simple T-T
+
+*/
+
+# 
 # Check the value for 'local_infile', if OFF then set ON
 
 SHOW GLOBAL VARIABLES LIKE 'local_infile';
@@ -70,6 +89,11 @@ LINES TERMINATED BY '\n'
 IGNORE 1 LINES;
 
 #-------------------- query for stored function to parse strings ------------------------------------------------------
+
+
+# In MySQL Workbench, we will use the built-in tool to create a new function. 
+# It automatically generates the necessary format so all we need to do was write the queries to execute.
+# Below is the full script for the PARSE() function 
 
 USE `nash`;
 DROP function IF EXISTS `PARSE`;
@@ -98,10 +122,14 @@ END$$
 DELIMITER ;
 ;
 
+
+
 #-------------------- query for stored procedure to replace all empty strings with NULL values ------------------------
 
-# We'll create a stored procedure that executes the following query for every column:	UPDATE `table_name` SET `column_name` = NULLIF(`column_name`, '') ;
-# Then we can simply call our stored procedure and pass our desired table name through it
+# Similarly, we will use the built-in tool to automatically generate the format to create a procedure.
+# This procedure will execute the following query for every column in our desired table: UPDATE `table_name` SET `column_name` = NULLIF(`column_name`, ''); 
+# That is, for each row in our `column_name`, replace it with the NULL value if it is an empty string
+# Below is the full script for the procedure
 
 USE `nash`;
 DROP procedure IF EXISTS `NULL_ALL`;
@@ -114,19 +142,20 @@ DELIMITER $$
 USE `nash`$$
 CREATE DEFINER=`root`@`localhost` PROCEDURE `NULL_ALL`(IN `tablename` CHAR(64))
 BEGIN
-  DECLARE i, num_rows INT;
+
+  DECLARE i, num_rows INT; 
   DECLARE col_name CHAR(250);
 
   DECLARE col_names CURSOR FOR
   SELECT COLUMN_NAME
   FROM INFORMATION_SCHEMA.COLUMNS
-  WHERE TABLE_NAME = tablename
+  WHERE TABLE_NAME = tablename # note the lack of backticks here, since our `tablename` is the parameter name
   AND IS_NULLABLE = 'YES'
   ORDER BY ORDINAL_POSITION;
 
   OPEN col_names ;
 
-  SELECT FOUND_ROWS() INTO num_rows;
+  SELECT FOUND_ROWS() INTO num_rows; # FOUND_ROWS() returns the number of columns and inserts into num_rows
 
   SET i = 1;
   
@@ -161,18 +190,18 @@ DELIMITER ;
 
 #---------------------------------------------------------------------------------------------------------------------------------
 
-# Copying original table so we don't work on the raw data
+# Copying original table so we avoid adjusting our raw data
 DROP TABLE IF EXISTS nash.temp;
 CREATE TABLE nash.temp AS
 SELECT *
 FROM nash.housing;
 
-#--------------------------------------------------------------------------------------------------------------------------------1
+#--------------------------------------------------------------------------------------------------------------------------------
 
-# Populate all the empty cells with NULL values
+# Populate all the empty cells with NULL values using our stored procedure >:D
 CALL NULL_ALL('temp');
 
-#--------------------------------------------------------------------------------------------------------------------------------2
+#--------------------------------------------------------------------------------------------------------------------------------
 
 # Convert the 'saledate' field type from text to date, standardize using the YYYY-MM-DD format, and insert data in new column
 ALTER TABLE nash.temp
@@ -182,11 +211,10 @@ ADD newsaledate DATE;
 UPDATE nash.temp
 SET newsaledate = STR_TO_DATE(saledate, "%M %e, %Y");
 
+#--------------------------------------------------------------------------------------------------------------------------------
 
-#--------------------------------------------------------------------------------------------------------------------------------3
-
-# Populate the NULL values in the property address field with proper address
-# Self-Join the table on the Parcel ID to figure out which rows need to be populated and to also find the corresponding address
+# Populate the NULL values in the property address field with their proper address
+# We Self-Join the table using the Parcel ID to determine the rows needing to be populated and to find their corresponding address
 SELECT 
 	a.parcelid, a.propertyaddress, 
     b.parcelid, b.propertyaddress, 
@@ -197,7 +225,7 @@ ON a.parcelid = b.parcelid
 AND a.uniqueid <> b.uniqueid
 WHERE a.propertyaddress IS NULL;
 
-# Using the INFULL() function, we'll populate the property address
+# Using the INFULL() function, we populate the property address
 UPDATE nash.temp a
 JOIN nash.temp b
 ON a.parcelid = b.parcelid
@@ -222,8 +250,9 @@ AND a.uniqueid <> b.uniqueid;
 
 #--------------------------------------------------------------------------------------------------------------------------------4
 
-# We want to split the property address into individual columns (i.e. address, city) to make the data usable
-# Check to see if we return the correct substrings
+# For practice, we will manually split the property address into individual columns (i.e. address, city) 
+# This will make the data usable 
+# Check to see if we will return the correct substrings
 SELECT
 	propertyaddress,
 	SUBSTRING_INDEX(propertyaddress, ',', 1) AS newpropertyaddress,
@@ -248,9 +277,8 @@ FROM nash.temp;
 
 #--------------------------------------------------------------------------------------------------------------------------------5
 
-# We also want to split the owners' addresses into their individual columns (address, city, state) 
-# Instead of manually parsing the strings, we'll use the PARSE() function we created earlier 
-# Check to see if our function works properly
+# Now we will split the owner addresses using our stored procedure 
+# Check to see if our function works properly before updating columns
 SELECT
 	owneraddress,
 	PARSE(owneraddress, ',', 1) AS newowneraddress,
@@ -259,7 +287,7 @@ SELECT
 FROM nash.temp
 WHERE owneraddress IS NOT NULL;
 
-# Add new columns for the owner's address, city, and state
+# Add new columns for the owner address, city, and state
 ALTER TABLE nash.temp
 ADD newowneraddress TEXT,
 ADD newownercity TEXT,
@@ -279,8 +307,8 @@ FROM nash.temp;
 
 #--------------------------------------------------------------------------------------------------------------------------------6
 
-# Standardize the 'soldasvacant' field
-# Check to see what the different values are and which ones we should standardize
+# We will standardize the 'soldasvacant' field 
+# First, check to see the different values
 SELECT soldasvacant, COUNT(uniqueid)
 FROM nash.temp
 GROUP BY 1
@@ -288,7 +316,7 @@ ORDER BY 2
 ;
 
 
-# Check to see the results for changing 'Y' and 'N' to 'Yes' and 'No'
+# Check to see the results for changing 'Y' and 'N' to 'Yes' and 'No' before updating column
 SELECT
 	CASE soldasvacant
 		WHEN 'Y' THEN 'Yes'
@@ -309,15 +337,20 @@ SET soldasvacant = CASE soldasvacant
 						ELSE soldasvacant
 					END
 ;
-# Rerun first-check query to see if update was successful
+# Re-run the previous count-groupby query to see if update was successful
 
 #--------------------------------------------------------------------------------------------------------------------------------7
 
-# Removing duplicates
-# Partition the data by the fields that should be unique using the window function ROW_NUMBER()
-# This will assign a sequential integer to each row, and rows with duplicated data will have a row number greater than one
-# We'll filter the rows to return the uniqueid of the duplicate rows in a subquery
-# Then we'll use the DELETE statement to delete rows where the uniqueid is in the subquery
+/* Removing Duplicates using multiple subqueries 
+
+In the inner subquery, we partition the data by the unique fields using the window function ROW_NUMBER()
+This will assign a sequential integer to each row.
+Rows with duplicated data will have a row number greater than one.
+In the outer subquery, we select the uniqueid of the duplicate rows.
+In the outer query, we filter our rows by the uniqueid of the duplicate rows along with the DELETE statement.
+
+*/
+
 DELETE FROM nash.temp
 WHERE
 	uniqueid IN (
@@ -344,7 +377,8 @@ WHERE
 	) t
 	WHERE row_num > 1
 );
-# Check to see if any duplicates still exist
+
+# Check to see if any duplicates still exist. If successfull, no rows are returned.
 SELECT
 		uniqueid
 	FROM (
@@ -371,7 +405,7 @@ SELECT
 #--------------------------------------------------------------------------------------------------------------------------------8
 
 # Lastly, we'll remove the unusable columns from our table 
-# NOTE: don't perform this on raw data, usually only practiced on views
+# NOTE: don't perform this on raw data, usually only practiced on views or temporary tables
 ALTER TABLE nash.temp
 DROP COLUMN propertyaddress, 
 DROP COLUMN saledate, 
@@ -380,7 +414,8 @@ DROP COLUMN taxdistrict;
 
 #--------------------------------------------------------------------------------------------------------------------------------9
 
-# Tada! All clean! YAY! >:3
+# TADA! All clean!! YAY! >:3
+
 SELECT * FROM nash.temp;
 
 
