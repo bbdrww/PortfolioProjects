@@ -1,5 +1,3 @@
-# Auto detect text files and perform LF normalization
-* text=auto
 /*
 
 DATA CLEANING using MySQL
@@ -382,3 +380,5 @@ DROP COLUMN taxdistrict;
 
 # Tada! All clean! YAY! >:3
 SELECT * FROM nash.temp;
+
+
