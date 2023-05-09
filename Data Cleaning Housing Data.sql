@@ -1,9 +1,11 @@
 /*
 
-DATA CLEANING using MySQL
+DATA CLEANING Nashville Housing Datasetusing MySQL
 
-Project Walkthrough:
+Project Objectives:
 
+-- Create schema & table
+-- Import/Load dataset from CSV file into table
 -- Copy raw data into a new table 
 -- Fill all empty cells with NULL values
 -- Convert and standardize date format
